@@ -56,11 +56,14 @@ func (cs *WebdavControllerServer) CreateVolume(ctx context.Context, req *csi.Cre
 		return nil, status.Error(codes.InvalidArgument, "The PVC does not have a 'user' annotation")
 	}
 	// TODO password secret instead of plaintext
-	publishParams[parameterPassword], err = cs.GetPVCPassword(pvcname, namespace)
+	password, err := cs.GetPVCPassword(pvcname, namespace)
 	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, "The PVC does not have a 'password' annotation")
+		password, err = cs.GetPVCPasswordSecret(pvcname, namespace)
+		if err != nil {
+			return nil, status.Error(codes.InvalidArgument, "The PVC does not have a valid 'password' or 'passwordSecret' annotation: "+err.Error())
+		}
 	}
-
+	publishParams[parameterPassword] = password
 	publishParams[parameterConfigName] = pvname
 
 	id := pvname + ":" + namespace
@@ -153,11 +156,11 @@ func (cs *WebdavControllerServer) GetPVCURL(pvc string, namespace string) (strin
 	if err != nil {
 		return "", err
 	}
-	if val, ok := ns.Annotations["url"]; ok {
+	if val, ok := ns.Annotations[parameterURL]; ok {
 		return val, nil
 	}
 
-	return "", status.Error(codes.NotFound, "Given namespace does not belong to any project")
+	return "", status.Error(codes.NotFound, "PVC does not have URL")
 }
 
 func (cs *WebdavControllerServer) GetPVCDir(pvc string, namespace string) (string, error) {
@@ -165,11 +168,11 @@ func (cs *WebdavControllerServer) GetPVCDir(pvc string, namespace string) (strin
 	if err != nil {
 		return "", err
 	}
-	if val, ok := ns.Annotations["dir"]; ok {
+	if val, ok := ns.Annotations[parameterDir]; ok {
 		return val, nil
 	}
 
-	return "", status.Error(codes.NotFound, "Given namespace does not belong to any project")
+	return "", status.Error(codes.NotFound, "PVC does not have dir")
 }
 
 func (cs *WebdavControllerServer) GetPVCUser(pvc string, namespace string) (string, error) {
@@ -177,11 +180,11 @@ func (cs *WebdavControllerServer) GetPVCUser(pvc string, namespace string) (stri
 	if err != nil {
 		return "", err
 	}
-	if val, ok := ns.Annotations["user"]; ok {
+	if val, ok := ns.Annotations[parameterUser]; ok {
 		return val, nil
 	}
 
-	return "", status.Error(codes.NotFound, "Given namespace does not belong to any project")
+	return "", status.Error(codes.NotFound, "PVC does not have user")
 }
 
 func (cs *WebdavControllerServer) GetPVCPassword(pvc string, namespace string) (string, error) {
@@ -189,9 +192,28 @@ func (cs *WebdavControllerServer) GetPVCPassword(pvc string, namespace string) (
 	if err != nil {
 		return "", err
 	}
-	if val, ok := ns.Annotations["password"]; ok {
+	if val, ok := ns.Annotations[parameterPassword]; ok {
 		return val, nil
 	}
 
-	return "", status.Error(codes.NotFound, "Given namespace does not belong to any project")
+	return "", status.Error(codes.NotFound, "PVC does not have password")
+}
+
+func (cs *WebdavControllerServer) GetPVCPasswordSecret(pvc string, namespace string) (string, error) {
+	ns, err := cs.K8sClient.CoreV1().PersistentVolumeClaims(namespace).Get(context.TODO(), pvc, v1.GetOptions{})
+	if err != nil {
+		return "", err
+	}
+	if val, ok := ns.Annotations[parameterPasswordSecret]; ok {
+		secret, err := cs.K8sClient.CoreV1().Secrets(namespace).Get(context.TODO(), val, v1.GetOptions{})
+		if err != nil {
+			return "", status.Error(codes.NotFound, "Secret could not be found: "+err.Error())
+		}
+		if password, ok := secret.Data["password"]; ok {
+			return string(password), nil
+		}
+		return "", status.Error(codes.InvalidArgument, "Secret does not have 'password' entry")
+	}
+
+	return "", status.Error(codes.NotFound, "PVC does not have passwordSecret: "+err.Error())
 }

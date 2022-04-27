@@ -20,12 +20,13 @@ type driver struct {
 }
 
 const (
-	driverName          = "csi-webdav"
-	parameterURL        = "url"
-	parameterDir        = "dir"
-	parameterUser       = "user"
-	parameterPassword   = "password"
-	parameterConfigName = "configName"
+	driverName              = "csi-webdav"
+	parameterURL            = "url"
+	parameterDir            = "dir"
+	parameterUser           = "user"
+	parameterPassword       = "password"
+	parameterPasswordSecret = "passwordSecret"
+	parameterConfigName     = "configName"
 )
 
 var (
